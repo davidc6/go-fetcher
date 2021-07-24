@@ -2,65 +2,60 @@ package utils
 
 import (
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 )
 
-func DoesFileExist(filename string) (bool) {
-	wd, e := os.Getwd()
+func getWorkingDirectory() (string) {
+	wd, err := os.Getwd()
 		
-	if (e != nil) {
-		log.Fatal(e)
+	if (err != nil) {
+		log.Fatal(err)
 	}
-	
-	wd = wd + "/files/" + filename
 
-	info, err := os.Stat(wd)
+	return wd
+}
+
+func DoesFileExist(filename string) (bool) {	
+	file := getWorkingDirectory() + "/files/" + filename
+
+	fileinfo, err := os.Stat(file)
 
 	if os.IsNotExist(err) {
 		return false
 	}
 
-	return !info.IsDir()
+	return !fileinfo.IsDir()
 }
 
-func File(filename string) (io.Reader) {
-	wd, e := os.Getwd()
-	
-	if (e != nil) {
-		log.Fatal(e)
-	}
+// Read the whole file into memory 
+func StringToReader(filename string) (io.Reader) {
+	wd := getWorkingDirectory() + "/files/" + filename
 
-	wd = wd + "/files/" + filename
+	f, err := os.Open(wd)
 	
-	data, e := ioutil.ReadFile(wd)
-	s := string(data)
+	if (err != nil) {
+		log.Fatal(err)
+	}
 	
-	return strings.NewReader(s)
+	return f
 }
 
 
 func SaveToDisk(dir string, data io.Reader) {
-	file, e := os.Getwd()
-			
-	if (e != nil) {
-		log.Fatal(e)
-	}
-	
-	file = file + "/" + dir
+	file := getWorkingDirectory() + "/" + dir
 
 	f, err := os.Create(file)
 	
 	if (err != nil) {
 		log.Fatal(err)
 	}
-	
+
 	io.Copy(f, data)
 }
 
 func CreateDir(dir string) {
+	// store in ./files dir temporary
 	err := os.Mkdir("files/" + dir , 0755)
 
 	if err != nil {

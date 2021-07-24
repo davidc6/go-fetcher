@@ -5,41 +5,105 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/davidc6/cf-careers/utils"
 )
 
 const url = "https://www.cloudflare.com/en-gb/careers/jobs/?department=Engineering&location=London,%20United%20Kingdom"
-const id = "cf"
+const ID = "cf"
+const LinksPage = "index.html"
+const LinksPageFile = ID + "/" + LinksPage
+const FirstPage = ID + "/page_0.html"
 
-func Run() {
-	// check if we need to fetch again
-	if (utils.DoesFileExist(id + "/index.html")) {
-		fmt.Println("file exists, parsing ...")
+var links []string
 
-		data := utils.File("cf/index.html")
+func parse() {
+	body := utils.StringToReader(LinksPageFile)
 
-		loadDoc(data)
+	loadDoc(body)
+}
+
+func parseLink(keyword string) {
+	var arr []string
+	
+	for _, link := range links {
+		end := strings.Split(link, "jobs/")
+		id := strings.Split(end[1], "?")
+		
+		str := ID + "/" + id[0] + ".html"
+		body := utils.StringToReader(str)
+		
+		doc, err := goquery.NewDocumentFromReader(body)
+		if (err != nil) {
+			log.Fatal(err)
+		}
+		
+		s := doc.Find("#content").Text()
+		
+		var keywords []string
+		if (keyword == "c" || keyword == "d" || keyword == "lua") {
+			keywords = append(keywords, " " + keyword + ".")
+			keywords = append(keywords, ", " + keyword + " ")
+			keywords = append(keywords, " " + keyword + ",")
+			keywords = append(keywords, "and " + keyword + ".")
+			keywords = append(keywords, " " + keyword + " ")
+		}
+
+		for _, val := range keywords {
+			c := strings.Contains(strings.ToLower(s), strings.ToLower(val))
+
+			if c {
+				arr = append(arr, id[0])
+				break
+			}
+		}
+	}
+
+	if (len(arr) == 0) {
+		fmt.Println("No match")
+	} else {		
+		for _, val := range arr {
+			fmt.Println("https://boards.greenhouse.io/cloudflare/jobs/" + val + ".html")
+		}
+	}
+}
+
+func Run(keyword string) {
+	// [1] Check if already fetched
+	if (utils.DoesFileExist(LinksPageFile)) {
+		fmt.Println("File exists, parsing ...")
+		parse()
+
+		// parse all links
+		parseLink(strings.ToLower(keyword))
 
 		return
 	}
 
-	// we need to fetch!
-	fmt.Println("file does not exist, fetching ...")
+	// [2] File doesn't exist, we need to fetch and save
+	fmt.Println("File does not exist, fetching ...")
 	
-	utils.CreateDir("cf")
-	data, err := utils.MakeRequest(url)
-	
-	if (err != nil) {
+	// create links page
+	utils.CreateDir(ID)
+
+	fmt.Println("Fetching jobs page ...")
+	if data, err := utils.MakeRequestHeadless(url); err != nil {
 		log.Fatal(err)
+	} else {
+		utils.SaveToDisk("files/" + LinksPageFile, strings.NewReader(data))
+		fmt.Println("Saved")
+		fmt.Println("Fetching jobs ...")
+		parse()
+		fmt.Println("Saved")
+		
+		// parse all links
+		parseLink(keyword)
 	}
-	
-	utils.SaveToDisk("cf/index.html", data)
 }
 
-func CloudflareLinks(doc *goquery.Document) ([]string) {
+func LinksToFetch(doc *goquery.Document) ([]string) {
 	links := make([]string, 0)
 
 	searchBy := "#jobs-list [style=\"\"]"
@@ -55,16 +119,28 @@ func CloudflareLinks(doc *goquery.Document) ([]string) {
 func loadDoc(body io.Reader) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(body)
 	
-	links := CloudflareLinks(doc)
-	
-	ch := make(chan []byte)
-	for _, v := range links {
-		go utils.MakeRequestCon(v, ch)
+	if err != nil {
+		log.Fatal((err))
 	}
+
+	links = LinksToFetch(doc)
 	
-	for i, _ := range links {
-		utils.SaveToDisk("files/cf/page_" + strconv.Itoa(i) + ".html", bytes.NewReader(<-ch))
+	rand := false
+	
+	if (rand) {
+		ch := make(chan []byte)
+	
+		for _, link := range links {
+			go utils.MakeRequestAsync(link, ch)
+
+			end := strings.Split(link, "jobs/")
+			id := strings.Split(end[1], "?")
+	
+			utils.SaveToDisk("files/cf/" + id[0] + ".html", bytes.NewReader(<-ch))
+		}
+
+		return "", err
 	}
-	
-	return "", err
+
+	return "", nil
 }
