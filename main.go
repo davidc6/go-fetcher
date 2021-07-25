@@ -43,6 +43,6 @@ func main() {
 			fmt.Println("Succeeded!")
 		}		
 	} else {
-		fmt.Println("Please indicate a parser that you want to use")		
+		fmt.Println("Please supply a parser name and keyword")		
 	}
 }

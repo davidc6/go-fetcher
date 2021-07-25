@@ -3,7 +3,6 @@ package cf
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"strings"
 
@@ -12,98 +11,104 @@ import (
 )
 
 const url = "https://www.cloudflare.com/en-gb/careers/jobs/?department=Engineering&location=London,%20United%20Kingdom"
-const ID = "cf"
-const LinksPage = "index.html"
-const LinksPageFile = ID + "/" + LinksPage
-const FirstPage = ID + "/page_0.html"
+const parserID = "cf"
+const linksPage = "index.html"
+const linksPageFile = parserID + "/" + linksPage
 
-var links []string
+func parseCareers() []string {
+	body := utils.StringToReader(linksPageFile)
+	doc, err := goquery.NewDocumentFromReader(body)
+	
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	rand := false
+	
+	links := LinksToFetch(doc)
 
-func parse() {
-	body := utils.StringToReader(LinksPageFile)
+	if (rand) {
+		ch := make(chan []byte)
+	
+		for _, link := range links {
+			go utils.MakeRequestAsync(link, ch)
 
-	loadDoc(body)
+			roleId := utils.RoleID(link)
+	
+			utils.SaveToDisk("files/cf/" + roleId + ".html", bytes.NewReader(<-ch))
+		}
+
+		return links
+	}
+
+	return links
 }
 
-func parseLink(keyword string) {
-	var arr []string
-	
-	for _, link := range links {
-		end := strings.Split(link, "jobs/")
-		id := strings.Split(end[1], "?")
-		
-		str := ID + "/" + id[0] + ".html"
-		body := utils.StringToReader(str)
-		
+func parseRole(roles []string, searchFor string) {
+	var matchedRoles = make([]string, 0)
+
+	for _, link := range roles {
+		roleId := utils.RoleID(link)
+
+		file := parserID + "/" + roleId + ".html"
+		body := utils.StringToReader(file)
+
 		doc, err := goquery.NewDocumentFromReader(body)
+
 		if (err != nil) {
 			log.Fatal(err)
 		}
-		
-		s := doc.Find("#content").Text()
-		
-		var keywords []string
-		if (keyword == "c" || keyword == "d" || keyword == "lua") {
-			keywords = append(keywords, " " + keyword + ".")
-			keywords = append(keywords, ", " + keyword + " ")
-			keywords = append(keywords, " " + keyword + ",")
-			keywords = append(keywords, "and " + keyword + ".")
-			keywords = append(keywords, " " + keyword + " ")
-		}
 
-		for _, val := range keywords {
-			c := strings.Contains(strings.ToLower(s), strings.ToLower(val))
+		bodyString := doc.Find("#content").Text()
+		keywords := utils.Keywords(searchFor)
 
-			if c {
-				arr = append(arr, id[0])
+		for _, keyword := range keywords {
+			doesContainKeyword := strings.Contains(strings.ToLower(bodyString), strings.ToLower(keyword))
+
+			if doesContainKeyword {				
+				matchedRoles = append(matchedRoles, roleId)
 				break
 			}
 		}
 	}
 
-	if (len(arr) == 0) {
+	if (len(roles) == 0) {
 		fmt.Println("No match")
-	} else {		
-		for _, val := range arr {
-			fmt.Println("https://boards.greenhouse.io/cloudflare/jobs/" + val + ".html")
+	} else {
+		for _, id := range matchedRoles {
+			fmt.Println("https://boards.greenhouse.io/cloudflare/jobs/" + id + ".html")
 		}
 	}
 }
 
 func Run(keyword string) {
-	// [1] Check if already fetched
-	if (utils.DoesFileExist(LinksPageFile)) {
+	if (utils.DoesFileExist(linksPageFile)) {
 		fmt.Println("File exists, parsing ...")
-		parse()
-
-		// parse all links
-		parseLink(strings.ToLower(keyword))
-
+		roles := parseCareers()
+		fmt.Println("Main file parsed.")
+		parseRole(roles, strings.ToLower(keyword))
 		return
 	}
 
-	// [2] File doesn't exist, we need to fetch and save
 	fmt.Println("File does not exist, fetching ...")
 	
 	// create links page
-	utils.CreateDir(ID)
+	utils.CreateDir(parserID)
 
 	fmt.Println("Fetching jobs page ...")
 	if data, err := utils.MakeRequestHeadless(url); err != nil {
 		log.Fatal(err)
 	} else {
-		utils.SaveToDisk("files/" + LinksPageFile, strings.NewReader(data))
+		utils.SaveToDisk("files/" + linksPageFile, strings.NewReader(data))
 		fmt.Println("Saved")
 		fmt.Println("Fetching jobs ...")
-		parse()
-		fmt.Println("Saved")
-		
-		// parse all links
-		parseLink(keyword)
+		roles := parseCareers()
+		fmt.Println("Saved")		
+		parseRole(roles, keyword)
 	}
 }
 
-func LinksToFetch(doc *goquery.Document) ([]string) {
+func LinksToFetch(doc *goquery.Document) []string {
 	links := make([]string, 0)
 
 	searchBy := "#jobs-list [style=\"\"]"
@@ -114,33 +119,4 @@ func LinksToFetch(doc *goquery.Document) ([]string) {
 	})
 
 	return links
-}
-
-func loadDoc(body io.Reader) (string, error) {
-	doc, err := goquery.NewDocumentFromReader(body)
-	
-	if err != nil {
-		log.Fatal((err))
-	}
-
-	links = LinksToFetch(doc)
-	
-	rand := false
-	
-	if (rand) {
-		ch := make(chan []byte)
-	
-		for _, link := range links {
-			go utils.MakeRequestAsync(link, ch)
-
-			end := strings.Split(link, "jobs/")
-			id := strings.Split(end[1], "?")
-	
-			utils.SaveToDisk("files/cf/" + id[0] + ".html", bytes.NewReader(<-ch))
-		}
-
-		return "", err
-	}
-
-	return "", nil
 }
