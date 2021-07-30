@@ -12,43 +12,28 @@ import (
 
 const url = "https://www.cloudflare.com/en-gb/careers/jobs/?department=Engineering&location=London,%20United%20Kingdom"
 const parserID = "cf"
-const linksPage = "index.html"
-const linksPageFile = parserID + "/" + linksPage
+const mainPage = "index.html"
+const mainPagePath = "/" + parserID + "/" + mainPage
 
-func parseCareers() []string {
-	body := utils.StringToReader(linksPageFile)
-	doc, err := goquery.NewDocumentFromReader(body)
+func fetchAndSaveIfRequired(urls []string, shouldRefetch bool) {
+	ch := make(chan []byte)
 	
-	if err != nil {
-		log.Fatal(err)
-	}
-	
-	rand := false
-	
-	links := LinksToFetch(doc)
+	for _, url := range urls {
+		path := "cf/" + utils.RoleID(url) + ".html"
 
-	if (rand) {
-		ch := make(chan []byte)
-	
-		for _, link := range links {
-			go utils.MakeRequestAsync(link, ch)
-
-			roleId := utils.RoleID(link)
-	
-			utils.SaveToDisk("files/cf/" + roleId + ".html", bytes.NewReader(<-ch))
+		if (!utils.DoesRegularFileExist(path) || shouldRefetch) {
+			go utils.MakeRequestAsync(url, ch)
+			utils.SaveToDisk(path, bytes.NewReader(<-ch))
 		}
-
-		return links
 	}
-
-	return links
 }
 
-func parseRole(roles []string, searchFor string) {
+
+func searchFilesForKeyword(urls []string, searchFor string) {
 	var matchedRoles = make([]string, 0)
 
-	for _, link := range roles {
-		roleId := utils.RoleID(link)
+	for _, url := range urls {
+		roleId := utils.RoleID(url)
 
 		file := parserID + "/" + roleId + ".html"
 		body := utils.StringToReader(file)
@@ -64,7 +49,6 @@ func parseRole(roles []string, searchFor string) {
 
 		for _, keyword := range keywords {
 			doesContainKeyword := strings.Contains(strings.ToLower(bodyString), strings.ToLower(keyword))
-
 			if doesContainKeyword {				
 				matchedRoles = append(matchedRoles, roleId)
 				break
@@ -72,7 +56,7 @@ func parseRole(roles []string, searchFor string) {
 		}
 	}
 
-	if (len(roles) == 0) {
+	if (len(urls) == 0) {
 		fmt.Println("No match")
 	} else {
 		for _, id := range matchedRoles {
@@ -81,42 +65,59 @@ func parseRole(roles []string, searchFor string) {
 	}
 }
 
-func Run(keyword string) {
-	if (utils.DoesFileExist(linksPageFile)) {
-		fmt.Println("File exists, parsing ...")
-		roles := parseCareers()
-		fmt.Println("Main file parsed.")
-		parseRole(roles, strings.ToLower(keyword))
+func lastSteps(keyword string, shouldRefetch bool, message string) {
+	urls := extractUrls(mainPagePath)
+
+	fetchAndSaveIfRequired(urls, shouldRefetch)
+
+	fmt.Println(message)
+
+	searchFilesForKeyword(urls, keyword)
+}
+
+func Run(keyword string, shouldRefetch bool) {
+	// [1] Exists
+	if (utils.DoesDirExist(parserID) && utils.DoesRegularFileExist(mainPagePath)) {
+		fmt.Println("File exists, processing ...")
+		
+		lastSteps(keyword, shouldRefetch, "Main file parsed")
+
 		return
 	}
 
+	// [2] Does not exist
 	fmt.Println("File does not exist, fetching ...")
-	
-	// create links page
 	utils.CreateDir(parserID)
-
 	fmt.Println("Fetching jobs page ...")
+
 	if data, err := utils.MakeRequestHeadless(url); err != nil {
 		log.Fatal(err)
 	} else {
-		utils.SaveToDisk("files/" + linksPageFile, strings.NewReader(data))
+		utils.SaveToDisk(mainPagePath, strings.NewReader(data))
+
 		fmt.Println("Saved")
 		fmt.Println("Fetching jobs ...")
-		roles := parseCareers()
-		fmt.Println("Saved")		
-		parseRole(roles, keyword)
+
+		lastSteps(keyword, shouldRefetch, "Saved")
 	}
 }
 
-func LinksToFetch(doc *goquery.Document) []string {
-	links := make([]string, 0)
+func extractUrls(path string) []string {
+	body := utils.StringToReader(path)
+	doc, err := goquery.NewDocumentFromReader(body)
+	
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	urls := make([]string, 0)
 
 	searchBy := "#jobs-list [style=\"\"]"
 
 	doc.Find(searchBy).Each(func(i int, s *goquery.Selection) {
-		link := s.Find("a").AttrOr("href", "")
-		links = append(links, link)
+		url := s.Find("a").AttrOr("href", "")		
+		urls = append(urls, url)
 	})
 
-	return links
+	return urls
 }

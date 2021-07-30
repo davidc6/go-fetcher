@@ -5,12 +5,13 @@ import "strings"
 func Keywords(keyword string) ([]string) {
 	var keywords []string
 
-	if (keyword == "c" || keyword == "d" || keyword == "lua") {
+	if (keyword == "c" || keyword == "d" || keyword == "lua" || keyword == "go") {
 		keywords = append(keywords, " " + keyword + ".")
 		keywords = append(keywords, ", " + keyword + " ")
 		keywords = append(keywords, " " + keyword + ",")
 		keywords = append(keywords, "and " + keyword + ".")
 		keywords = append(keywords, " " + keyword + " ")
+		return keywords
 	}
 
 	return append(keywords, keyword)

@@ -4,9 +4,12 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 )
 
-func getWorkingDirectory() (string) {
+const filesPath = "files"
+
+func getWorkingDirectory() string {
 	wd, err := os.Getwd()
 		
 	if (err != nil) {
@@ -16,16 +19,44 @@ func getWorkingDirectory() (string) {
 	return wd
 }
 
-func DoesFileExist(filename string) (bool) {	
-	file := getWorkingDirectory() + "/files/" + filename
+func CreateDirIfNotExists(relativePath string) bool {
+	absolutePath := filepath.Join(getWorkingDirectory(), relativePath)
+	fileinfo, err := os.Stat(absolutePath)
 
-	fileinfo, err := os.Stat(file)
+	if os.IsNotExist(err) {
+		err := os.Mkdir(absolutePath, 0755)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return true
+	}
+
+	return fileinfo.IsDir()
+}
+
+
+func DoesRegularFileExist(regularFile string) bool {
+	absolutePath := filepath.Join(getWorkingDirectory(), filesPath, regularFile)
+	fileinfo, err := os.Stat(absolutePath)
 
 	if os.IsNotExist(err) {
 		return false
 	}
 
 	return !fileinfo.IsDir()
+}
+
+func DoesDirExist(dir string) bool {
+	absolutePath := filepath.Join(getWorkingDirectory(), filesPath, dir)
+	fileinfo, err := os.Stat(absolutePath)
+
+	if os.IsNotExist(err) {
+		return false
+	}
+
+	return fileinfo.IsDir()
 }
 
 // Read the whole file into memory 
@@ -41,9 +72,8 @@ func StringToReader(filename string) (io.Reader) {
 	return f
 }
 
-
 func SaveToDisk(dir string, data io.Reader) {
-	file := getWorkingDirectory() + "/" + dir
+	file := filepath.Join(getWorkingDirectory(), filesPath, dir)
 
 	f, err := os.Create(file)
 	
@@ -55,8 +85,8 @@ func SaveToDisk(dir string, data io.Reader) {
 }
 
 func CreateDir(dir string) {
-	// store in ./files dir temporary
-	err := os.Mkdir("files/" + dir , 0755)
+	absolutePath := filepath.Join(getWorkingDirectory(), filesPath, dir)
+	err := os.Mkdir(absolutePath , 0755)
 
 	if err != nil {
 		log.Fatal(err)
