@@ -5,23 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/davidc6/cf-careers/cf"
 	"github.com/davidc6/cf-careers/utils"
 )
-
-func getLinks(doc *goquery.Document) ([]string) {
-	links := make([]string, 0)
-
-	// searchBy := "#jobs-list [style=""]"
-	searchBy := ".row .title"
-	doc.Find(searchBy).Each(func (i int, s *goquery.Selection) {
-		link := s.AttrOr("href", "")
-		links = append(links, "https://webscraper.io" + link)
-	})
-
-	return links
-}
 
 func hasBeenParsed(parserId string, keyword string, shouldRefetch bool) (bool, error) {
 	utils.CreateDirIfNotExists("files")
